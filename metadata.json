@@ -1,0 +1,8 @@
+{
+  "name": "サロン・整体院 LINE予約システム",
+  "description": "LINE公式アカウントおよびGoogleカレンダーとリアルタイムに空き枠連携するサロン・整体院向けのWeb予約システム",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
