@@ -24,7 +24,7 @@ import { checkClosedDay } from './holiday-utils';
 // ====================================================================
 // 1. 外部設定定数
 // ====================================================================
-export const GAS_URL = "https://script.google.com/macros/s/AKfycbzi5gwqE1A5XWJfqTEOCLdgVoZllN5ev8XiRLVWUNGKUHx1VEs78eg2yTKDmdnUVCab/exec";
+export const GAS_URL = "https://script.google.com/macros/s/AKfycbx9SLx9MgbptRNtrKZDD6tu2tL_1JZrlQJYOwtB0VndQUWfAu3PKRVSwCOiMSQJD1Ai/exec";
 export const LIFF_ID = "2011886818-6xLhW2nd";
 export const CALENDAR_ID = "watanabe@harumicho-seitai.com";
 
