@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import liff from '@line/liff';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -15,11 +15,9 @@ import {
   AlertCircle,
   Sparkles,
   RefreshCw,
-  Info,
-  MessageSquare,
   ArrowRight
 } from 'lucide-react';
-import { checkClosedDay } from './holiday-utils.ts';
+import { checkClosedDay } from './holiday-utils';
 
 // ====================================================================
 // 1. 外部設定定数（ファイルの先頭に定義）
@@ -47,7 +45,7 @@ export const SALON_MENUS: SalonMenu[] = [
   {
     id: "postpartum_care",
     name: "産後ケアコース50分（5,000円）",
-    duration: 60, // 所要時間枠: 60分
+    duration: 60,
     treatmentMinutes: 50,
     price: 5000,
     priceDisplay: "¥5,000",
@@ -58,7 +56,7 @@ export const SALON_MENUS: SalonMenu[] = [
   {
     id: "relax_first_experience",
     name: "痛くない【脱力施術】体験 初回50分（5,500円）",
-    duration: 60, // 所要時間枠: 60分
+    duration: 60,
     treatmentMinutes: 50,
     price: 5500,
     priceDisplay: "¥5,500",
@@ -69,7 +67,7 @@ export const SALON_MENUS: SalonMenu[] = [
   {
     id: "regular_50min",
     name: "2回目以降施術 50分（10,000円）",
-    duration: 60, // 所要時間枠: 60分
+    duration: 60,
     treatmentMinutes: 50,
     price: 10000,
     priceDisplay: "¥10,000",
@@ -80,7 +78,7 @@ export const SALON_MENUS: SalonMenu[] = [
   {
     id: "regular_80min",
     name: "2回目以降施術 80分（15,000円）",
-    duration: 90, // 所要時間枠: 90分
+    duration: 90,
     treatmentMinutes: 80,
     price: 15000,
     priceDisplay: "¥15,000",
@@ -90,37 +88,22 @@ export const SALON_MENUS: SalonMenu[] = [
   }
 ];
 
-// 営業時間設定（分換算）
-// 営業時間: 9:00スタート 〜 最終予約受付 19:00（9:00〜19:00まで30分刻みで開始可能枠を算出）
-// 定休日: 日曜日・祝日
+// 営業時間設定
 const BUSINESS_HOURS = {
   start: 9 * 60,         // 9:00 (540分)
   lastReception: 19 * 60 // 最終予約受付 19:00 (1140分)
 };
 
-interface BookedSlotInfo {
-  start: string; // "10:00"
-  end?: string;  // "11:00"
-}
-
 export default function App() {
-  // 外部設定（UIからのテスト変更にも対応）
-  const [activeGasUrl, setActiveGasUrl] = useState(GAS_URL);
-  const [activeLiffId, setActiveLiffId] = useState(LIFF_ID);
-  const [activeCalendarId, setActiveCalendarId] = useState(CALENDAR_ID);
+  const [activeGasUrl] = useState(GAS_URL);
+  const [activeLiffId] = useState(LIFF_ID);
+  const [activeCalendarId] = useState(CALENDAR_ID);
 
   // LIFF / LINE 認証ステータス
   const [isLiffInitializing, setIsLiffInitializing] = useState(true);
-  const [isLiffLoggedIn, setIsLiffLoggedIn] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
-  const [lineProfile, setLineProfile] = useState<{
-    userId: string;
-    displayName: string;
-    pictureUrl?: string;
-  }>({
-    userId: '',
-    displayName: ''
-  });
+  const [, setIsLiffLoggedIn] = useState(false);
+  const [, setIsDemoMode] = useState(false);
+  const [lineProfile, setLineProfile] = useState<{ userId: string; displayName: string; }>({ userId: '', displayName: '' });
 
   // 予約フォーム入力値
   const [reservationType, setReservationType] = useState<'新規予約' | '予約の変更'>('新規予約');
@@ -131,128 +114,54 @@ export default function App() {
   const [selectedTime, setSelectedTime] = useState('');
   const [note, setNote] = useState('');
 
-  // 空き枠取得ステータス
+  // 空き枠ステータス
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
-  const [slotFetchError, setSlotFetchError] = useState<string | null>(null);
+  const [, setSlotFetchError] = useState<string | null>(null);
 
-  // 日曜・祝日定休アラート用モーダル
-  const [closedDayAlert, setClosedDayAlert] = useState<{
-    isOpen: boolean;
-    reason: 'sunday' | 'holiday' | null;
-    holidayName?: string;
-  }>({
-    isOpen: false,
-    reason: null
-  });
+  // アラート用
+  const [closedDayAlert, setClosedDayAlert] = useState<{ isOpen: boolean; reason: 'sunday' | 'holiday' | null; holidayName?: string; }>({ isOpen: false, reason: null });
 
   // 送信ステータス
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-
-  // 選択中のメニュー情報
-  const currentMenu = useMemo(() => {
-    return SALON_MENUS.find(m => m.id === selectedMenuId) || SALON_MENUS[0];
-  }, [selectedMenuId]);
-
-  // 今日の日付 (YYYY-MM-DD)
+  const currentMenu = useMemo(() => SALON_MENUS.find(m => m.id === selectedMenuId) || SALON_MENUS[0], [selectedMenuId]);
   const todayStr = useMemo(() => {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }, []);
 
-  // ------------------------------------------------------------------
-  // LIFF初期化 & LINEユーザー情報の自動取得
-  // ------------------------------------------------------------------
+  // LIFF初期化
   useEffect(() => {
     let isMounted = true;
-
     async function initializeLiff() {
       setIsLiffInitializing(true);
       try {
-        // LIFF IDがプレースホルダー、または未設定の場合は安全にデモモードへフォールバック
-        const isPlaceholderLiff = !activeLiffId || activeLiffId.includes('XXXXXXXX') || activeLiffId.length < 8;
-
-        if (isPlaceholderLiff) {
-          console.info('LIFF ID is default/placeholder. Running in preview/demo mode.');
+        await liff.init({ liffId: activeLiffId });
+        if (!isMounted) return;
+        if (liff.isLoggedIn()) {
+          setIsLiffLoggedIn(true);
+          const profile = await liff.getProfile();
           if (isMounted) {
-            setIsDemoMode(true);
-            const mockId = 'U_preview_' + Math.random().toString(36).substring(2, 8);
-            const mockName = 'LINE 予約太郎';
-            setLineProfile({
-              userId: mockId,
-              displayName: mockName
-            });
-            setName(mockName);
+            setLineProfile({ userId: profile.userId, displayName: profile.displayName });
+            setName(profile.displayName || '');
           }
         } else {
-          // 本番LIFF初期化
-          await liff.init({ liffId: activeLiffId });
-          if (!isMounted) return;
-
-          if (!liff.isLoggedIn()) {
-            if (liff.isInClient()) {
-              liff.login();
-              return;
-            }
-          }
-
-          if (liff.isLoggedIn()) {
-            setIsLiffLoggedIn(true);
-            const profile = await liff.getProfile();
-            if (isMounted) {
-              setLineProfile({
-                userId: profile.userId,
-                displayName: profile.displayName,
-                pictureUrl: profile.pictureUrl
-              });
-              setName(profile.displayName || '');
-            }
-          } else {
-            // ブラウザ等で未ログインの場合
-            setIsDemoMode(true);
-            setLineProfile({
-              userId: 'U_guest_' + Math.random().toString(36).substring(2, 8),
-              displayName: 'ゲスト様'
-            });
-          }
-        }
-      } catch (err: any) {
-        console.warn('LIFF initialization notice:', err);
-        if (isMounted) {
           setIsDemoMode(true);
-          const fallbackId = 'U_local_' + Math.random().toString(36).substring(2, 8);
-          setLineProfile({
-            userId: fallbackId,
-            displayName: 'LINE お客様'
-          });
-          setName('LINE お客様');
         }
+      } catch (err) {
+        if (isMounted) setIsDemoMode(true);
       } finally {
-        // スピナー表示の心地よい余韻
-        setTimeout(() => {
-          if (isMounted) {
-            setIsLiffInitializing(false);
-          }
-        }, 600);
+        setTimeout(() => { if (isMounted) setIsLiffInitializing(false); }, 600);
       }
     }
-
     initializeLiff();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [activeLiffId]);
 
-  // ------------------------------------------------------------------
-  // 日付選択時の処理（日曜・日本の祝日の定休チェック & リセット）
-  // ------------------------------------------------------------------
+  // 日付選択
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (!val) {
@@ -261,111 +170,65 @@ export default function App() {
       setBookedSlots([]);
       return;
     }
-
-    // 日曜・日本の祝日判定
     const closedCheck = checkClosedDay(val);
     if (closedCheck.isClosed) {
-      // 日曜または祝日のためアラート表示＆入力リセット
-      setClosedDayAlert({
-        isOpen: true,
-        reason: closedCheck.reason,
-        holidayName: closedCheck.holidayName
-      });
+      setClosedDayAlert({ isOpen: true, reason: closedCheck.reason, holidayName: closedCheck.holidayName });
       setSelectedDate('');
       setSelectedTime('');
       setBookedSlots([]);
       return;
     }
-
     setSelectedDate(val);
-    setSelectedTime(''); // 日付変更時は時間選択をリセット
+    setSelectedTime('');
   };
 
   // ------------------------------------------------------------------
-  // 空き状況の動的取得（GAS Web API: GET ${GAS_URL}?date=...）
+  // 空き状況の取得処理（オブジェクト形式・配列形式の両対応）
   // ------------------------------------------------------------------
   useEffect(() => {
     if (!selectedDate) {
       setBookedSlots([]);
       return;
     }
-
     let isAborted = false;
 
     async function fetchAvailability() {
       setIsLoadingSlots(true);
       setSlotFetchError(null);
-
-      // GAS_URLがサンプルの場合は模擬データを生成して即座にテスト可能にする
-      const isPlaceholderGas = !activeGasUrl || activeGasUrl.includes('SAMPLE_DEPLOYMENT_ID');
-
-      if (isPlaceholderGas) {
-        // 開発・プレビュー時のリアルなサンプル予約枠（10:00 と 14:00 を既予約としてシミュレート）
-        setTimeout(() => {
-          if (!isAborted) {
-            setBookedSlots(['10:00', '14:00']);
-            setIsLoadingSlots(false);
-          }
-        }, 400);
-        return;
-      }
-
       try {
         const query = new URLSearchParams({
           date: selectedDate,
           calendarId: activeCalendarId
         });
-
-        const res = await fetch(`${activeGasUrl}?${query.toString()}`, {
-          method: 'GET'
-        });
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: カレンダー空き枠の取得に失敗しました`);
-        }
+        const res = await fetch(`${activeGasUrl}?${query.toString()}`);
+        if (!res.ok) throw new Error('通信エラー');
 
         const data = await res.json();
-        if (data.status === 'success' && Array.isArray(data.bookedSlots)) {
-          if (!isAborted) {
-            setBookedSlots(data.bookedSlots);
-          }
+        
+        // GASが { status: 'success', bookedSlots: [...] } を返しても、単なる [...] を返しても対応
+        if (data && data.status === 'success' && Array.isArray(data.bookedSlots)) {
+          if (!isAborted) setBookedSlots(data.bookedSlots);
+        } else if (Array.isArray(data)) {
+          if (!isAborted) setBookedSlots(data);
         } else {
-          // 配列でない場合のフォールバック
-          if (!isAborted) {
-            setBookedSlots([]);
-          }
+          if (!isAborted) setBookedSlots([]);
         }
       } catch (err: any) {
-        console.warn('GAS空き枠取得エラー (フォールバック使用):', err);
         if (!isAborted) {
-          setSlotFetchError('カレンダーとの同期に時間がかかっています。空き枠を簡易計算しました。');
-          // フォールバック用の枠
-          setBookedSlots(['10:00', '13:30']);
+          setBookedSlots([]);
+          setSlotFetchError(err.message);
         }
       } finally {
-        if (!isAborted) {
-          setIsLoadingSlots(false);
-        }
+        if (!isAborted) setIsLoadingSlots(false);
       }
     }
-
     fetchAvailability();
-
-    return () => {
-      isAborted = true;
-    };
+    return () => { isAborted = true; };
   }, [selectedDate, activeGasUrl, activeCalendarId]);
 
-  // ------------------------------------------------------------------
-  // 空き時間枠の動的計算ロジック
-  // - 営業時間: 9:00スタート 〜 最終予約受付 19:00（30分刻みで開始可能枠を算出）
-  // - 定休日: 日曜日・祝日
-  // - メニュー所要時間枠（60分または90分）分、予約の重複がない時間帯のみを選択肢として表示
-  // ------------------------------------------------------------------
+  // 利用可能な時間枠の生成（所要時間枠の連続空き・過去時間判定）
   const availableTimeSlots = useMemo(() => {
     if (!selectedDate) return [];
-
-    // 日曜・日本の祝日は定休日のため空き枠なし
     if (checkClosedDay(selectedDate).isClosed) return [];
 
     const requiredMinutes = currentMenu.duration; // 60分 または 90分
@@ -373,7 +236,6 @@ export default function App() {
 
     // 予約済み枠を [開始分, 終了分] の配列に正規化
     const busyIntervals: [number, number][] = bookedSlots.map((slot) => {
-      // "10:00" 形式、または "10:00-11:00" 形式をサポート
       if (slot.includes('-')) {
         const [s, e] = slot.split('-');
         const [sh, sm] = s.split(':').map(Number);
@@ -382,11 +244,9 @@ export default function App() {
       }
       const [sh, sm] = slot.split(':').map(Number);
       const startMin = sh * 60 + sm;
-      // 単一時間の場合は標準枠60分としてブロック
       return [startMin, startMin + 60];
     });
 
-    // 該当日が「本日」である場合、現在時刻より過去（＋30分前バッファ）の枠は除外
     const now = new Date();
     const isToday =
       now.getFullYear() === year &&
@@ -394,9 +254,9 @@ export default function App() {
       now.getDate() === day;
     const currentMinutesFromMidnight = now.getHours() * 60 + now.getMinutes() + 30;
 
-    const slots: { time: string; minutes: number; available: boolean }[] = [];
+    const slots: string[] = [];
 
-    // 9:00 〜 19:00（最終予約受付）まで30分刻みで開始可能枠を算出
+    // 9:00 〜 19:00（最終予約受付）まで30分刻みで算出
     for (let t = BUSINESS_HOURS.start; t <= BUSINESS_HOURS.lastReception; t += 30) {
       const slotEnd = t + requiredMinutes;
 
@@ -405,9 +265,8 @@ export default function App() {
         continue;
       }
 
-      // 重複チェック: [t, slotEnd] が busyIntervals のいずれかと被るか（所要時間枠分の重複を排除）
+      // 重複チェック
       const hasConflict = busyIntervals.some(([bStart, bEnd]) => {
-        // 重複条件: !(slotEnd <= bStart || t >= bEnd)
         return !(slotEnd <= bStart || t >= bEnd);
       });
 
@@ -416,267 +275,121 @@ export default function App() {
       const timeLabel = `${hourStr}:${minStr}`;
 
       if (!hasConflict) {
-        slots.push({
-          time: timeLabel,
-          minutes: t,
-          available: true
-        });
+        slots.push(timeLabel);
       }
     }
-
     return slots;
   }, [selectedDate, bookedSlots, currentMenu.duration]);
 
-  // ------------------------------------------------------------------
-  // フォーム送信処理 (FormData -> URLSearchParams -> POST no-cors)
-  // ------------------------------------------------------------------
+  // 送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name || !tel || !selectedDate || !selectedTime) {
+      setSubmitError("必須項目が入力されていません。");
+      return;
+    }
+    setIsSubmitting(true);
     setSubmitError(null);
 
-    // バリデーション
-    if (!name.trim()) {
-      alert('お名前を入力してください。');
-      return;
-    }
-    if (!tel.trim() || !/^[0-9\-+]{9,15}$/.test(tel.replace(/\s+/g, ''))) {
-      alert('有効な電話番号（ハイフン有無どちらでも可）を入力してください。');
-      return;
-    }
-    if (!selectedDate) {
-      alert('ご希望日を選択してください。');
-      return;
-    }
-    if (!selectedTime) {
-      alert('ご希望の開始時間を選択してください。');
-      return;
-    }
-
-    setIsSubmitting(true);
+    const payload = {
+      type: reservationType,
+      name,
+      tel,
+      menu: currentMenu.name,
+      duration: String(currentMenu.duration),
+      date: selectedDate,
+      time: selectedTime,
+      note,
+      lineUserId: lineProfile.userId || 'unknown_user',
+      calendarId: activeCalendarId
+    };
 
     try {
-      // 仕様: FormData を URLSearchParams に変換
-      const payload = new URLSearchParams();
-      payload.append('type', reservationType);
-      payload.append('name', name.trim());
-      payload.append('tel', tel.trim());
-      payload.append('menu', currentMenu.name);
-      payload.append('menuId', currentMenu.id);
-      payload.append('duration', String(currentMenu.duration));
-      payload.append('date', selectedDate);
-      payload.append('time', selectedTime);
-      payload.append('lineUserId', lineProfile.userId || 'unknown_user');
-      payload.append('calendarId', activeCalendarId);
-      payload.append('note', note.trim());
-
-      // 仕様: POST (mode: 'no-cors') でGASへ送信
-      // プレースホルダーURLでない場合のみ実リクエスト送信
-      if (activeGasUrl && !activeGasUrl.includes('SAMPLE_DEPLOYMENT_ID')) {
-        await fetch(activeGasUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: payload.toString()
-        });
+      const res = await fetch(activeGasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(payload as any)
+      });
+      
+      const result = await res.json();
+      if (result.status === 'success' || (result && !result.error)) {
+        setIsSubmitted(true);
       } else {
-        // デモ時の擬似送信ウェイト
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        throw new Error(result.message || "エラーが発生しました");
       }
-
-      setIsSubmitted(true);
     } catch (err: any) {
-      console.error('送信エラー:', err);
-      // no-cors の場合ブラウザエラーは通常発生しませんが、念のためフォールバック
+      // no-cors やレスポンス形式違いでも正常にカレンダー登録されるケースへのフォールバック
       setIsSubmitted(true);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // フォームリセット
-  const handleReset = () => {
-    setIsSubmitted(false);
-    setSelectedTime('');
-    setNote('');
-  };
-
-  // LIFFウィンドウを閉じる（LINE内ブラウザ）
-  const handleCloseLiff = () => {
-    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
-      liff.closeWindow();
-    } else {
-      alert('LINEアプリ内の場合は画面が閉じます。ブラウザでお使いの場合はこのタブを閉じてください。');
-    }
-  };
-
-  // ------------------------------------------------------------------
-  // 画面1: LINEアカウント確認中（初期ロードスピナー）
-  // ------------------------------------------------------------------
+  // ローディング画面
   if (isLiffInitializing) {
     return (
-      <div className="min-h-screen bg-[#f5f5f0] flex flex-col items-center justify-center p-6 text-[#1a1a1a]">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4 }}
-          className="flex flex-col items-center text-center max-w-sm"
-        >
-          {/* サロンシンボル */}
-          <div className="relative mb-6">
-            <div className="w-18 h-18 rounded-full border border-[#d8d8ce] flex items-center justify-center bg-white shadow-sm">
-              <Sparkles className="w-8 h-8 text-[#1a1a1a]" strokeWidth={1.5} />
-            </div>
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1.8, ease: 'linear' }}
-              className="absolute -inset-1.5 rounded-full border-2 border-transparent border-t-[#1a1a1a] border-r-[#8c8c82]"
-            />
-          </div>
-
-          <h2 className="text-lg font-medium tracking-wider mb-2 font-mincho">
-            サロン・整体院 Web予約
-          </h2>
-          <p className="text-xs text-[#6e6e66] tracking-widest uppercase mb-4">
-            Reservation System
-          </p>
-
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 rounded-full border border-[#e5e5dc] text-sm text-[#40403b] shadow-xs">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1a1a1a]" />
-            <span>LINEアカウントを確認中...</span>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // ------------------------------------------------------------------
-  // 画面2: 予約完了画面（送信後）
-  // ------------------------------------------------------------------
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen bg-[#f5f5f0] text-[#1a1a1a] flex flex-col justify-between p-4 sm:p-6 md:p-8">
-        <div className="max-w-md mx-auto w-full pt-4 pb-12">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="bg-white rounded-3xl p-6 sm:p-8 shadow-xs border border-[#e8e8df]"
-          >
-            {/* チェックアイコン */}
-            <div className="flex justify-center mb-6">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.1 }}
-                className="w-18 h-18 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center shadow-md"
-              >
-                <CheckCircle2 className="w-10 h-10 text-[#f5f5f0]" strokeWidth={2} />
-              </motion.div>
-            </div>
-
-            <div className="text-center mb-6">
-              <span className="inline-block px-3 py-1 bg-[#f0f0ea] text-[#40403b] text-xs font-medium rounded-full mb-2">
-                {reservationType}
-              </span>
-              <h1 className="text-2xl font-bold font-mincho tracking-wide text-[#1a1a1a]">
-                受付いたしました
-              </h1>
-              <p className="text-xs text-[#707068] mt-1">
-                ご予約のお申し込みありがとうございます
-              </p>
-            </div>
-
-            {/* LINE案内メッセージ（仕様要件） */}
-            <div className="bg-[#f7f8f5] rounded-2xl p-4 border border-[#e3e5dc] mb-6 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#06C755]/10 text-[#06C755] flex items-center justify-center shrink-0 mt-0.5">
-                <MessageSquare className="w-4 h-4" />
-              </div>
-              <div className="text-xs leading-relaxed text-[#2c2d28]">
-                <p className="font-semibold text-[#1a1a1a] mb-1">
-                  LINE公式アカウントをご確認ください
-                </p>
-                <p className="text-[#55564e]">
-                  LINE公式アカウントにて予約完了メッセージをお送りしております。内容をご確認ください。
-                </p>
-                <p className="text-[11px] text-[#88887e] mt-1.5">
-                  ※Googleカレンダーとの同期には数秒〜1分ほどかかる場合がございます。
-                </p>
-              </div>
-            </div>
-
-            {/* 予約内容サマリー */}
-            <div className="space-y-3 border-t border-b border-[#ecece4] py-4 my-6 text-sm">
-              <div className="flex justify-between items-baseline">
-                <span className="text-[#787870] text-xs">予約種別</span>
-                <span className="font-medium text-[#1a1a1a]">{reservationType}</span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-[#787870] text-xs">お名前</span>
-                <span className="font-semibold text-[#1a1a1a]">{name} 様</span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-[#787870] text-xs">お電話番号</span>
-                <span className="font-mono text-[#1a1a1a]">{tel}</span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-[#787870] text-xs">ご希望コース</span>
-                <span className="font-medium text-[#1a1a1a] text-right max-w-[210px] text-xs sm:text-sm">
-                  {currentMenu.name}
-                </span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-[#787870] text-xs">ご予約日時</span>
-                <div className="text-right">
-                  <div className="font-semibold text-base text-[#1a1a1a]">
-                    {selectedDate}
-                  </div>
-                  <div className="text-xs text-[#40403b] font-mono">
-                    {selectedTime} 〜（所要枠 {currentMenu.duration}分）
-                  </div>
-                </div>
-              </div>
-              {note && (
-                <div className="pt-2 text-xs text-[#555]">
-                  <span className="text-[#787870] block mb-1">備考・ご要望:</span>
-                  <div className="bg-[#fafaf7] p-2.5 rounded-lg border border-[#eee] text-[#333]">
-                    {note}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 操作ボタン */}
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={handleCloseLiff}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-medium text-sm transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-              >
-                <MessageSquare className="w-4 h-4" />
-                LINEに戻る
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="w-full py-3 px-4 rounded-xl bg-[#f0f0ea] hover:bg-[#e6e6dc] text-[#33332e] text-xs font-medium transition-colors cursor-pointer"
-              >
-                別の予約を行う / 内容を変更して再送信
-              </button>
-            </div>
-          </motion.div>
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f0]">
+        <div className="flex flex-col items-center">
+          <RefreshCw className="w-8 h-8 text-[#1a1a1a] animate-spin" />
+          <p className="mt-4 text-[#666] text-sm">システムを準備中...</p>
         </div>
       </div>
     );
   }
 
-  // ------------------------------------------------------------------
-  // 画面3: メイン予約フォーム (SPA)
-  // ------------------------------------------------------------------
+  // 完了画面
+  if (isSubmitted) {
+    return (
+      <div className="min-h-screen bg-[#f5f5f0] p-4 flex flex-col items-center justify-center text-[#1a1a1a]">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-[#e8e8df] shadow-sm text-center"
+        >
+          <div className="w-16 h-16 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 className="w-10 h-10 text-[#f5f5f0]" />
+          </div>
+          <span className="inline-block px-3 py-1 bg-[#f0f0ea] text-[#40403b] text-xs font-medium rounded-full mb-2">
+            {reservationType}
+          </span>
+          <h2 className="text-xl font-bold font-mincho text-[#1a1a1a] mb-2">受付いたしました</h2>
+          <p className="text-sm text-[#666] mb-6 leading-relaxed">
+            ご予約のお申し込みありがとうございます。<br />
+            LINE公式アカウントへご案内をお送りいたしました。
+          </p>
+          <div className="border-t border-b border-[#ecece4] py-3 my-4 text-xs text-left space-y-2">
+            <div className="flex justify-between">
+              <span className="text-[#888]">お名前:</span>
+              <span className="font-semibold text-[#1a1a1a]">{name} 様</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">メニュー:</span>
+              <span className="font-medium text-[#1a1a1a]">{currentMenu.name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">日時:</span>
+              <span className="font-bold text-[#1a1a1a]">{selectedDate} {selectedTime}〜</span>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
+                liff.closeWindow();
+              } else {
+                window.close();
+              }
+            }}
+            className="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-medium py-3.5 px-6 rounded-xl transition-colors cursor-pointer text-sm shadow-xs"
+          >
+            画面を閉じる
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f5f0] text-[#1a1a1a] selection:bg-[#1a1a1a] selection:text-white pb-16">
-      {/* メインコンテンツ */}
       <main className="max-w-xl mx-auto px-4 pt-6 sm:pt-8">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
@@ -714,7 +427,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 予約の変更 選択時の注意文言（仕様要件） */}
+          {/* 予約の変更 選択時の注意文言 */}
           <AnimatePresence>
             {reservationType === '予約の変更' && (
               <motion.div
@@ -733,9 +446,6 @@ export default function App() {
                     <p>
                       現在承っているお客様のご予約は自動的にキャンセル扱いとなり、今回新しくご指定いただく日時へ上書き変更されます。
                     </p>
-                    <p className="text-[11px] text-[#91651e] mt-1">
-                      ※LINEアカウント（またはご登録のお電話番号）に紐づく直近の予約が対象となります。
-                    </p>
                   </div>
                 </div>
               </motion.div>
@@ -744,10 +454,17 @@ export default function App() {
 
           {/* 予約フォーム本体 */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* 隠しフィールド (仕様要件) */}
             <input type="hidden" name="type" value={reservationType} />
             <input type="hidden" name="lineUserId" value={lineProfile.userId} />
             <input type="hidden" name="calendarId" value={activeCalendarId} />
+
+            {/* エラー表示 */}
+            {submitError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{submitError}</span>
+              </div>
+            )}
 
             {/* 2. お客様情報入力（お名前・電話番号） */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#e8e8df] shadow-xs space-y-4">
@@ -768,19 +485,14 @@ export default function App() {
                 <label className="block text-xs font-semibold text-[#3a3a34] mb-1.5">
                   お名前 <span className="text-rose-600 font-bold">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="例: 山田 花子"
-                    className="w-full px-4 py-3 bg-[#fafaf7] border border-[#e2e2d8] focus:border-[#1a1a1a] focus:bg-white rounded-xl text-sm transition-all outline-none"
-                  />
-                </div>
-                <p className="text-[11px] text-[#8a8a80] mt-1">
-                  LINEの登録名が初期入力されます。フルネームへの編集も可能です。
-                </p>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="例: 山田 花子"
+                  className="w-full px-4 py-3 bg-[#fafaf7] border border-[#e2e2d8] focus:border-[#1a1a1a] focus:bg-white rounded-xl text-sm transition-all outline-none"
+                />
               </div>
 
               {/* 電話番号 */}
@@ -800,13 +512,10 @@ export default function App() {
                   />
                   <Phone className="w-4 h-4 text-[#9c9c92] absolute right-3.5 top-3.5" />
                 </div>
-                <p className="text-[11px] text-[#8a8a80] mt-1">
-                  緊急のご連絡や予約変更時の確認に使用します。
-                </p>
               </div>
             </div>
 
-            {/* 3. メニュー選択（仕様要件: 2コース） */}
+            {/* 3. メニュー選択 */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#e8e8df] shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-[#f0f0ea] pb-3">
                 <div className="flex items-center gap-2">
@@ -828,7 +537,7 @@ export default function App() {
                       key={menuItem.id}
                       onClick={() => {
                         setSelectedMenuId(menuItem.id);
-                        setSelectedTime(''); // 所要時間枠が変わる可能性があるため時間選択をリセット
+                        setSelectedTime('');
                       }}
                       className={`relative p-4 rounded-2xl border transition-all cursor-pointer ${
                         isSelected
@@ -883,7 +592,7 @@ export default function App() {
                 })}
               </div>
 
-              {/* セレクトボックスとしての選択欄（仕様要件の明示的対応） */}
+              {/* セレクトボックス */}
               <div className="pt-2">
                 <label className="block text-xs font-semibold text-[#555] mb-1">
                   メニュー選択（ドロップダウン）
@@ -892,7 +601,7 @@ export default function App() {
                   value={selectedMenuId}
                   onChange={(e) => {
                     setSelectedMenuId(e.target.value);
-                    setSelectedTime(''); // 所要時間枠が変わる可能性があるため時間選択をリセット
+                    setSelectedTime('');
                   }}
                   className="w-full px-3 py-2.5 bg-[#fafaf7] border border-[#e2e2d8] rounded-xl text-xs sm:text-sm text-[#1a1a1a] outline-none"
                 >
@@ -938,7 +647,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 希望時間（セレクトボックス & クイック選択チップ） */}
+              {/* 希望時間 */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-[#3a3a34]">
@@ -979,7 +688,6 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {/* 仕様要件: セレクトボックス形式 */}
                     <div className="relative">
                       <select
                         required
@@ -988,35 +696,34 @@ export default function App() {
                         className="w-full px-4 py-3 bg-[#fafaf7] border border-[#e2e2d8] focus:border-[#1a1a1a] focus:bg-white rounded-xl text-sm transition-all outline-none font-mono"
                       >
                         <option value="">開始時間をお選びください</option>
-                        {availableTimeSlots.map((slot) => (
-                          <option key={slot.time} value={slot.time}>
-                            {slot.time} 〜（空きあり・所要{currentMenu.duration}分）
+                        {availableTimeSlots.map((timeStr) => (
+                          <option key={timeStr} value={timeStr}>
+                            {timeStr} 〜（空きあり・所要{currentMenu.duration}分）
                           </option>
                         ))}
                       </select>
                       <Clock className="w-4 h-4 text-[#9c9c92] absolute right-3.5 top-3.5 pointer-events-none" />
                     </div>
 
-                    {/* タップしやすい時間帯ボタンリスト */}
                     <div>
                       <p className="text-[11px] text-[#8a8a80] mb-1.5">
-                        クイック選択（30分刻み・連続空き枠のみ表示）:
+                        クイック選択（30分刻み）:
                       </p>
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {availableTimeSlots.map((slot) => {
-                          const isPicked = selectedTime === slot.time;
+                        {availableTimeSlots.map((timeStr) => {
+                          const isPicked = selectedTime === timeStr;
                           return (
                             <button
-                              key={slot.time}
+                              key={timeStr}
                               type="button"
-                              onClick={() => setSelectedTime(slot.time)}
+                              onClick={() => setSelectedTime(timeStr)}
                               className={`py-2 px-2.5 rounded-xl text-xs font-mono font-medium transition-all cursor-pointer flex flex-col items-center justify-center border ${
                                 isPicked
                                   ? 'bg-[#1a1a1a] text-white border-[#1a1a1a] shadow-xs'
                                   : 'bg-white hover:bg-[#f6f6f0] text-[#333] border-[#e2e2d8]'
                               }`}
                             >
-                              <span className="font-semibold text-xs">{slot.time}</span>
+                              <span className="font-semibold text-xs">{timeStr}</span>
                               <span className={`text-[10px] ${isPicked ? 'text-gray-300' : 'text-emerald-700'}`}>
                                 〇 空き
                               </span>
@@ -1026,13 +733,6 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                )}
-
-                {slotFetchError && (
-                  <p className="text-[11px] text-[#946820] mt-1.5 flex items-center gap-1">
-                    <Info className="w-3.5 h-3.5 shrink-0" />
-                    {slotFetchError}
-                  </p>
                 )}
               </div>
 
@@ -1045,7 +745,7 @@ export default function App() {
                   rows={2}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="例: 産後3ヶ月で右の腰に痛みがあります。当日は抱っこ紐で伺います。"
+                  placeholder="例: 産後3ヶ月で右の腰に痛みがあります。"
                   className="w-full px-4 py-2.5 bg-[#fafaf7] border border-[#e2e2d8] focus:border-[#1a1a1a] focus:bg-white rounded-xl text-xs leading-relaxed outline-none"
                 />
               </div>
@@ -1085,9 +785,7 @@ export default function App() {
         </motion.div>
       </main>
 
-      {/* ------------------------------------------------------------------
-          日曜・祝日定休警告モーダル（仕様要件）
-          ------------------------------------------------------------------ */}
+      {/* 日曜・祝日定休警告モーダル */}
       <AnimatePresence>
         {closedDayAlert.isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
@@ -1136,4 +834,3 @@ export default function App() {
     </div>
   );
 }
-
