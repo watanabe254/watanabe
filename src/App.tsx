@@ -13,28 +13,24 @@ import {
   Phone,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
   RefreshCw,
-  Info,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  Sparkles,
+  Info
 } from 'lucide-react';
 import { checkClosedDay } from './holiday-utils';
 
-// ====================================================================
-// 1. 外部設定定数
 // ====================================================================
 export const GAS_URL = "https://script.google.com/macros/s/AKfycbx9SLx9MgbptRNtrKZDD6tu2tL_1JZrlQJYOwtB0VndQUWfAu3PKRVSwCOiMSQJD1Ai/exec";
 export const LIFF_ID = "2011886818-6xLhW2nd";
 export const CALENDAR_ID = "watanabe@harumicho-seitai.com";
 
 // ====================================================================
-// 2. メニュー構成
-// ====================================================================
 export interface SalonMenu {
   id: string;
   name: string;
-  duration: number; // カレンダー所要時間枠: 60分 / 90分
+  duration: number;
   treatmentMinutes: number; 
   price: number;
   priceDisplay: string;
@@ -91,8 +87,8 @@ export const SALON_MENUS: SalonMenu[] = [
 ];
 
 const BUSINESS_HOURS = {
-  start: 9 * 60,         // 9:00 
-  lastReception: 19 * 60 // 最終予約受付 19:00 
+  start: 9 * 60,         
+  lastReception: 19 * 60 
 };
 
 export default function App() {
@@ -113,7 +109,7 @@ export default function App() {
 
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
-  const [rawEvents, setRawEvents] = useState<any[]>([]); // 分単位計算用の詳細データ
+  const [rawEvents, setRawEvents] = useState<any[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [closedDayAlert, setClosedDayAlert] = useState<{ isOpen: boolean; reason: 'sunday' | 'holiday' | null; holidayName?: string; }>({ isOpen: false, reason: null });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -216,16 +212,14 @@ export default function App() {
     return () => { isAborted = true; };
   }, [selectedDate, activeGasUrl, activeCalendarId]);
 
-  // 【最重要】分単位での空き枠判定ロジック
   const availableTimeSlots = useMemo(() => {
     if (!selectedDate) return [];
     const slots = [];
-    const requiredMins = currentMenu.duration; // メニューの所要時間（60または90）
+    const requiredMins = currentMenu.duration;
 
     for (let m = BUSINESS_HOURS.start; m <= BUSINESS_HOURS.lastReception; m += 30) {
       let isAvailable = true;
 
-      // パターンA：GASから予定の詳細な開始・終了時間が届いている場合（分単位で正確に判定）
       if (rawEvents && rawEvents.length > 0) {
         const slotStart = m;
         const slotEnd = m + requiredMins;
@@ -239,16 +233,13 @@ export default function App() {
             const [evEndH, evEndM] = ev.end.split(':').map(Number);
             const evEndMin = evEndH * 60 + evEndM;
 
-            // 予定の開始が「枠の終了」より前であり、かつ予定の終了が「枠の開始」より後である場合＝重複（予約不可）
             if (evStartMin < slotEnd && evEndMin > slotStart) {
               isAvailable = false;
               break;
             }
           }
         }
-      } 
-      // パターンB：配列のみ届いている場合の代替判定（30分ブロックチェック）
-      else {
+      } else {
         const requiredBlocks = Math.ceil(requiredMins / 30);
         for (let i = 0; i < requiredBlocks; i++) {
           const checkM = m + (i * 30);
@@ -298,6 +289,32 @@ export default function App() {
       });
       const result = await res.json();
       if (result.status === 'success' || (result && !result.error)) {
+        
+        // 【追加】LINEトーク画面にお客様の発言として黄色い吹き出しを自動送信
+        if (liff.isInClient()) {
+          try {
+            const messageText = [
+              reservationType === '新規予約' ? `【ご予約お申し込み】` : `【ご予約変更お申し込み】`,
+              `■お名前: ${name} 様`,
+              `■LINE名: ${lineProfile.displayName || '取得不可'}`,
+              `■希望日: ${selectedDate}`,
+              `■開始時間: ${selectedTime}`,
+              `■メニュー: ${currentMenu.name}`,
+              `■電話番号: ${tel}`,
+              `■その他ご要望:\n${note || '特になし'}`
+            ].join('\n');
+
+            await liff.sendMessages([
+              {
+                type: 'text',
+                text: messageText
+              }
+            ]);
+          } catch (e) {
+            console.error('LINE送信エラー', e);
+          }
+        }
+
         setIsSubmitted(true);
       } else {
         throw new Error();
