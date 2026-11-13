@@ -22,7 +22,7 @@ import { checkClosedDay } from './holiday-utils';
 // ====================================================================
 export const SHOP_TITLE = "晴見町整体院 WEB予約";
 export const GAS_URL = "https://script.google.com/macros/s/AKfycbwLjyz1Y-KzVWdctaa_6_aOKC06N4ShPyv2XPZKGkSDATJywhXHsPISPoQeMKqk1Q0h/exec";
-export const LIFF_ID = "2011886818-6xLhW2nd";
+export const LIFF_ID = "2012590453-xrqu5dTN";
 export const CALENDAR_ID = "watanabe@harumicho-seitai.com";
 
 export interface SalonMenu {
