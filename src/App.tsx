@@ -22,7 +22,7 @@ import {
 import { checkClosedDay } from './holiday-utils';
 
 // ====================================================================
-export const GAS_URL = "https://script.google.com/macros/s/AKfycbx9SLx9MgbptRNtrKZDD6tu2tL_1JZrlQJYOwtB0VndQUWfAu3PKRVSwCOiMSQJD1Ai/exec";
+export const GAS_URL = "https://script.google.com/macros/s/AKfycbwLjyz1Y-KzVWdctaa_6_aOKC06N4ShPyv2XPZKGkSDATJywhXHsPISPoQeMKqk1Q0h/exec";
 export const LIFF_ID = "2011886818-6xLhW2nd";
 export const CALENDAR_ID = "watanabe@harumicho-seitai.com";
 
