@@ -102,6 +102,9 @@ export default function App() {
   const [reservationType, setReservationType] = useState<'新規予約' | '予約の変更'>('新規予約');
   const [name, setName] = useState('');
   const [tel, setTel] = useState('');
+  const [birthYear, setBirthYear] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthDay, setBirthDay] = useState('');
   const [selectedMenuId, setSelectedMenuId] = useState<string>(SALON_MENUS[0].id);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
@@ -116,6 +119,41 @@ export default function App() {
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const currentMenu = useMemo(() => SALON_MENUS.find(m => m.id === selectedMenuId) || SALON_MENUS[0], [selectedMenuId]);
+  const isSecondVisitOrMore = selectedMenuId === 'regular_50min' || selectedMenuId === 'regular_80min';
+  const requiresBirthDate = reservationType === '新規予約' && !isSecondVisitOrMore;
+
+  const birthYearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years: number[] = [];
+    for (let y = currentYear; y >= 1925; y--) {
+      years.push(y);
+    }
+    return years;
+  }, []);
+
+  const birthDayOptions = useMemo(() => {
+    const y = birthYear ? Number(birthYear) : 2000;
+    const m = birthMonth ? Number(birthMonth) : 1;
+    const maxDays = new Date(y, m, 0).getDate();
+    return Array.from({ length: maxDays }, (_, idx) => idx + 1);
+  }, [birthYear, birthMonth]);
+
+  useEffect(() => {
+    if (birthDay && Number(birthDay) > birthDayOptions.length) {
+      setBirthDay('');
+    }
+  }, [birthDay, birthDayOptions.length]);
+
+  const birthDate = useMemo(() => {
+    if (!birthYear || !birthMonth || !birthDay) return '';
+    return `${birthYear}-${String(birthMonth).padStart(2, '0')}-${String(birthDay).padStart(2, '0')}`;
+  }, [birthYear, birthMonth, birthDay]);
+
+  const birthDateDisplay = useMemo(() => {
+    if (!birthYear || !birthMonth || !birthDay) return '';
+    return `${birthYear}年${birthMonth}月${birthDay}日`;
+  }, [birthYear, birthMonth, birthDay]);
+
   const todayStr = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -264,7 +302,7 @@ export default function App() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !tel || !selectedDate || !selectedTime) return;
+    if (!name || !tel || (requiresBirthDate && !birthDate) || !selectedDate || !selectedTime) return;
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -272,6 +310,7 @@ export default function App() {
       type: reservationType,
       name,
       tel,
+      birthDate: requiresBirthDate ? birthDate : '',
       menu: currentMenu.name,
       duration: currentMenu.duration,
       date: selectedDate,
@@ -297,6 +336,7 @@ export default function App() {
               reservationType === '新規予約' ? `【ご予約お申し込み】` : `【ご予約変更お申し込み】`,
               `■お名前: ${name} 様`,
               `■LINE名: ${lineProfile.displayName || '取得不可'}`,
+              ...(requiresBirthDate && birthDateDisplay ? [`■生年月日: ${birthDateDisplay}`] : []),
               `■希望日: ${selectedDate}`,
               `■開始時間: ${selectedTime}`,
               `■メニュー: ${currentMenu.name}`,
@@ -370,6 +410,12 @@ export default function App() {
               <span className="text-slate-500">お電話番号</span>
               <span className="font-semibold text-slate-800">{tel}</span>
             </div>
+            {requiresBirthDate && birthDateDisplay && (
+              <div className="flex justify-between items-start border-b border-slate-200/80 pb-2.5">
+                <span className="text-slate-500">生年月日</span>
+                <span className="font-semibold text-slate-800">{birthDateDisplay}</span>
+              </div>
+            )}
             <div className="flex justify-between items-start border-b border-slate-200/80 pb-2.5">
               <span className="text-slate-500">ご希望日時</span>
               <span className="font-semibold text-slate-800">{selectedDate} {selectedTime}〜</span>
@@ -506,6 +552,71 @@ export default function App() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition"
                   />
                 </div>
+                <AnimatePresence initial={false}>
+                  {requiresBirthDate && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-slate-600">
+                            生年月日 <span className="text-red-500">*</span>
+                          </label>
+                          <span className="text-[11px] text-emerald-700 font-medium">
+                            初回のみ必須（2回目以降は不要）
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <select
+                            required={requiresBirthDate}
+                            value={birthYear}
+                            onChange={(e) => setBirthYear(e.target.value)}
+                            aria-label="生年"
+                            className="w-full px-2.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition cursor-pointer"
+                          >
+                            <option value="">年</option>
+                            {birthYearOptions.map((y) => (
+                              <option key={y} value={String(y)}>
+                                {y}年
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            required={requiresBirthDate}
+                            value={birthMonth}
+                            onChange={(e) => setBirthMonth(e.target.value)}
+                            aria-label="生月"
+                            className="w-full px-2.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition cursor-pointer"
+                          >
+                            <option value="">月</option>
+                            {Array.from({ length: 12 }, (_, idx) => idx + 1).map((m) => (
+                              <option key={m} value={String(m)}>
+                                {m}月
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            required={requiresBirthDate}
+                            value={birthDay}
+                            onChange={(e) => setBirthDay(e.target.value)}
+                            aria-label="生日"
+                            className="w-full px-2.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition cursor-pointer"
+                          >
+                            <option value="">日</option>
+                            {birthDayOptions.map((d) => (
+                              <option key={d} value={String(d)}>
+                                {d}日
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
@@ -695,9 +806,9 @@ export default function App() {
             {/* 送信ボタン */}
             <button
               type="submit"
-              disabled={!name || !tel || !selectedDate || !selectedTime || isSubmitting}
+              disabled={!name || !tel || (requiresBirthDate && !birthDate) || !selectedDate || !selectedTime || isSubmitting}
               className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm ${
-                !name || !tel || !selectedDate || !selectedTime || isSubmitting
+                !name || !tel || (requiresBirthDate && !birthDate) || !selectedDate || !selectedTime || isSubmitting
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.99] shadow-emerald-600/20 shadow-md'
               }`}
